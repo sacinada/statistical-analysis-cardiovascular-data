@@ -1,0 +1,285 @@
+---
+title: "exam project"
+author: "Mechou lina, Saci nada"
+date: "2026-01-16"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document: default
+---
+
+## Introduction
+This document presents a statistical analysis of cardiovascular data, exploring relationships between physical activity, demographic characteristics, and various health indicators.
+```{r setup, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'center')
+
+library(ggplot2)
+library(ggpubr)
+library(car)
+library(lmtest)
+library(rcompanion)
+```
+## Data Loading
+```{r cars}
+dataset01_body_cardio <- read.csv("dataset01_body_cardio.csv")
+dataset01<- dataset01_body_cardio
+summary(dataset01)
+```
+# 1. Physical Activity and Sex
+
+## Research Question
+Is physical activity level associated with sex?
+```{r}
+ggplot(data = dataset01, aes(x = sex, fill = physically_active)) +
+  geom_bar(position = "fill") +
+  labs(x = "Sex", y = "Proportion", fill = "Physical Activity",title = "Proportion of Physical Activity by Sex") 
+```
+## Statistical Test
+```{r}
+# H0: Physical activity level is independent of sex
+# H1: Physical activity level is associated with sex
+chisq.test(dataset01$sex, dataset01$physically_active)
+```
+**Conclusion:** p-value < 0.05, we reject H0. Physical activity level is associated with sex.
+
+---
+
+# 2. Systolic Pressure and Physical Activity
+
+## Research Question
+Does mean systolic blood pressure differ between active and inactive individuals?
+```{r}
+ggplot(dataset01, aes(x=physically_active, y=systolic_pressure, fill=physically_active))+
+  geom_boxplot()+ labs(x="Activité physique", y="Pression systolique (mmHg)")
+```
+## Statistical Tests
+```{r}
+Active<-dataset01$systolic_pressure[dataset01$physically_active == "Yes"]
+Not_active<-dataset01$systolic_pressure[dataset01$physically_active == "No"]
+```
+### Normality Test
+```{r}
+# H0: Data follows a normal distribution
+# H1: Data does not follow a normal distribution
+shapiro.test(Active)
+shapiro.test(Not_active)
+```
+**Result:** p-value < 0.05 for both groups → data does not follow a normal distribution.
+
+### Wilcoxon Test
+```{r}
+# H0: Mean systolic blood pressure is the same in both groups
+# H1: Mean systolic blood pressure differs between the two groups
+wilcox.test(Active, Not_active)
+```
+**Conclusion:** p-value < 0.05, we reject H0. Mean systolic blood pressure is different between active and inactive individuals.
+
+---
+
+# 3. Total Cholesterol and Sex
+
+## Research Question
+Do women have a different mean total cholesterol than men?
+```{r}
+ggplot(dataset01, aes(x = sex, y = total_cholesterol, fill = sex)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, alpha = 0.5, color = "green") + labs(x = "Sexe",y = "Cholestérol total",title = "Comparaison du cholestérol total entre hommes et femmes")
+```
+## Statistical Tests
+```{r}
+femme<-dataset01$total_cholesterol[dataset01$sex=="female"]
+homme<-dataset01$total_cholesterol[dataset01$sex=="male"]
+```
+### Normality Test
+```{r}
+shapiro.test(femme)
+shapiro.test(homme)
+```
+**Result:** p-value < 0.05 for both variables (female and male), we reject H0 and accept H1. The data does not follow a normal distribution.
+
+### Wilcoxon Test
+```{r}
+# H0: Mean total cholesterol is the same in women and men
+# H1: Women have a different mean total cholesterol than men
+wilcox.test(femme, homme)
+```
+**Conclusion:** p-value < 0.05, we reject H0. Women have a different mean total cholesterol than men.
+
+---
+
+# 4. Total Cholesterol and Age Groups
+
+## Research Question
+Does mean total cholesterol differ between different age groups (young, adults, seniors)?
+```{r}
+dataset01$age_group <- ifelse(dataset01$age_years < 30, "Jeune",
+                              ifelse(dataset01$age_years <= 50, "Adulte", "Senior"))
+ggplot(dataset01, aes(x = age_group, y = total_cholesterol, fill = age_group)) +
+  geom_boxplot() +                        
+  geom_jitter(width = 0.2, alpha = 0.5, color = "black") + labs(title = "Cholestérol total selon les tranches d'âge",x = "Tranche d'âge",y = "Cholestérol total")
+```
+## Statistical Tests
+```{r}
+model = lm(total_cholesterol~age_group, data=dataset01)
+```
+### Normality Test of Residuals
+```{r}
+shapiro.test(model$residuals)
+```
+**Result:** p-value < 0.05, we reject H0 and accept H1. The data does not follow a normal distribution.
+
+### Variances Test
+```{r}
+# H0: Variances are equal
+# H1: Variances are not equal
+bartlett.test(total_cholesterol ~ age_group, data = dataset01)
+```
+**Result:** p-value < 0.05, we reject H0 and accept H1. The variances are different.
+
+### Kruskal-Wallis Test
+```{r}
+# H0: Total cholesterol distributions are identical for all age groups
+# H1: At least one age group has a different distribution
+kruskal.test(total_cholesterol ~ age_group, data = dataset01)
+```
+**Result:** p-value < 0.05, we reject H0 and accept H1. There is a difference between at least two groups.
+
+### Post-hoc Comparisons
+```{r}
+pairwise.wilcox.test(dataset01$total_cholesterol, dataset01$age_group,p.adjust.method = "bonferroni")
+```
+**Conclusion:** 
+
+- Young vs Adult: p-value < 0.05 → significant difference
+- Young vs Senior: p-value < 0.05 → significant difference  
+- Adult vs Senior: p-value > 0.05 → no significant difference
+
+Young people have different mean total cholesterol levels than adults and seniors.
+
+---
+
+# 5. Combined Effect of Sex and Physical Activity
+
+## Research Question
+Is there a combined effect of sex and physical activity on systolic pressure?
+```{r}
+ggline(dataset01, x = "sex",y = "systolic_pressure",color = "physically_active", add = c("mean_se", "jitter"),  
+       palette = c("#00AFBB", "#E7B800"), ylab = "Pression systolique (mmHg)",xlab = "Sexe",title = "Effet combiné du sexe et de l'activité physique sur la pression systolique")
+```
+## Statistical Tests
+```{r}
+model=lm(systolic_pressure~sex*physically_active, data=dataset01)
+```
+### Normality Test
+```{r}
+shapiro.test(model$residuals)
+```
+**Result:** p-value < 0.05, we reject H0 and accept H1. The data does not follow a normal distribution.
+
+### Variance test
+```{r}
+# H0: Variances are equal
+# H1: At least one group has a different variance
+leveneTest(systolic_pressure~sex*physically_active, data=dataset01)
+```
+**Result:** p-value < 0.05, we reject H0 and accept H1. The variances between groups are not equal.
+
+### Scheirer-Ray-Hare Test
+```{r}
+# H0: The effect of physical activity on systolic pressure does not depend on sex
+# H1: The effect of physical activity on systolic pressure depends on sex
+scheirerRayHare(systolic_pressure ~ sex * physically_active, data = dataset01)
+```
+**Conclusion:** p-value > 0.05, we accept H0. The effect of physical activity is similar in men and women (no significant interaction).
+
+---
+
+# 6. Correlation Between Age and Systolic Pressure
+
+## Research Question
+Is age correlated with systolic blood pressure?
+```{r}
+ggplot(dataset01, aes(x = age_years, y = systolic_pressure)) +
+  geom_point() +labs(title = "Relation entre l'âge et la pression artérielle systolique",x = "Âge (années)",y = "Pression systolique (mmHg)")
+```
+### Normality Test
+```{r}
+shapiro.test(dataset01$age_years)
+shapiro.test(dataset01$systolic_pressure)
+```
+**Result:** p-value < 0.05 for both variables (age_years and systolic_pressure), we reject H0 and accept H1. The data does not follow a normal distribution.
+
+### Spearman Correlation
+```{r}
+# H0: There is no correlation between age and systolic pressure (ρ = 0)
+# H1: There is a correlation between age and systolic pressure (ρ ≠ 0)
+cor.test(dataset01$age_years, dataset01$systolic_pressure, method = "spearman")
+```
+**Conclusion:** p-value < 0.05, we reject H0. There is a correlation between age and systolic pressure.
+
+---
+
+# 7. Regression: Direct and Total Cholesterol
+
+## Research Question
+Can we predict total cholesterol from direct cholesterol?
+```{r}
+ggplot(dataset01, aes(x = direct_cholesterol, y = total_cholesterol)) +
+  geom_point() +
+  theme_classic() + labs(x = "cholesterol direct",y = "Cholestérol total",title = "Relation entre le cholesterol direct et le cholestérol total") +
+  geom_smooth(method = lm)
+```
+## Statistical Tests
+```{r}
+# H0: Direct cholesterol has no effect on total cholesterol (β₁ = 0)
+# H1: Direct cholesterol has an effect on total cholesterol (β₁ ≠ 0)
+model = lm(total_cholesterol~ direct_cholesterol, dataset01)
+summary(model)
+```
+**Conclusion:** p-value < 0.05, we reject H0. Direct cholesterol has an effect on total cholesterol.
+
+### Model Diagnostics
+```{r}
+plot(model,1)
+plot(model,2)
+plot(model,3)
+```
+### Variance test
+```{r}
+# H0: Variance of the data is constant
+# H1: Variance of the data is not constant
+bptest(model)
+```
+**Result:** p-value > 0.05, we accept H0. Variances are constant (homoscedasticity assumption met).
+
+### Normality of Residuals
+```{r}
+# H0: Data follows a normal distribution
+# H1: Data does not follow a normal distribution
+shapiro.test(model$residuals)
+```
+**Result:** p-value < 0.05, we reject H0. The data does not follow a normal distribution.
+
+# Summary
+
+This analysis explored multiple relationships in cardiovascular health data:
+
+1. Physical activity is different between men and women.
+
+2. Systolic blood pressure is different in active and inactive people.
+
+3. Cholesterol levels are not the same in women and men.
+
+4. Young people have different cholesterol levels than adults and seniors.
+
+5. Physical activity affects systolic pressure in the same way for men and women.
+
+6. Age is related to systolic blood pressure.
+
+7. Direct cholesterol is linked to total cholesterol.
+
+
+
+
+
+
